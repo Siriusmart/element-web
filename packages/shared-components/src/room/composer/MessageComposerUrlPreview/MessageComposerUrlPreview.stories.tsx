@@ -27,7 +27,12 @@ const MessageComposerUrlPreviewViewWrapperImpl = ({
     const vm = useMockedViewModel(rest, {});
     return (
         <LinkedTextContext.Provider value={{}}>
-            <MessageComposerUrlPreviewView vm={vm} />
+            <MessageComposerUrlPreviewView
+                vm={vm}
+                collapsed={true}
+                removePreview={undefined}
+                toggleCollapsed={() => {}}
+            />
         </LinkedTextContext.Provider>
     );
 };
