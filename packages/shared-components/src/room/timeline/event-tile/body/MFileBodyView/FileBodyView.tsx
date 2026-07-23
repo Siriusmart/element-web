@@ -13,6 +13,7 @@ import {
     DownloadIcon,
     VideoCallSolidIcon,
     VolumeOnSolidIcon,
+    EditIcon,
 } from "@vector-im/compound-design-tokens/assets/web/icons";
 
 import styles from "./FileBodyView.module.css";
@@ -136,6 +137,10 @@ interface FileBodyViewProps {
      * Optional hidden anchor ref used for encrypted download flow
      */
     refLink?: React.RefObject<HTMLAnchorElement>;
+    /*
+     * Click handler for the edit button.
+     */
+    onEditClick?: () => void;
 }
 
 /**
@@ -180,7 +185,7 @@ function getInfoIcon(infoIcon?: FileBodyViewInfoIcon): ComponentType<React.SVGAt
  * <FileBodyView vm={fileBodyViewModel} />
  * ```
  */
-export function FileBodyView({ vm, refIFrame, refLink, className }: Readonly<FileBodyViewProps>): JSX.Element {
+export function FileBodyView({ vm, refIFrame, refLink, className, onEditClick }: Readonly<FileBodyViewProps>): JSX.Element {
     const { translate: _t } = useI18n();
 
     const {
@@ -210,9 +215,18 @@ export function FileBodyView({ vm, refIFrame, refLink, className }: Readonly<Fil
                     aria-label={resolvedInfoLabel}
                     Icon={resolvedInfoIcon}
                     onClick={vm.onInfoClick}
+                    className={styles.mediaNameButton}
                 >
                     <span>{resolvedInfoLabel}</span>
                 </Button>
+                {
+                    onEditClick &&
+                    <div className={styles.rightButtonsContainer}>
+                        <Button onClick={onEditClick}>
+                            <EditIcon />
+                        </Button>
+                    </div>
+                }
             </MediaBody>
         </Tooltip>
     ) : null;
