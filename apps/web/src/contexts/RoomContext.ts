@@ -28,6 +28,7 @@ export enum MainSplitContentType {
     Timeline,
     MaximisedWidget,
     Call,
+    FileEditor,
 }
 
 export interface RoomContextType extends IRoomState {

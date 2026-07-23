@@ -27,6 +27,7 @@ import { ImageBodyViewModel } from "../../../viewmodels/message-body/ImageBodyVi
 import { RedactedBodyViewModel } from "../../../viewmodels/message-body/RedactedBodyViewModel";
 import { VideoBodyViewModel } from "../../../viewmodels/message-body/VideoBodyViewModel";
 import { isMimeTypeAllowed } from "../../../utils/blobs";
+import FileEditorStore from "../../../stores/FileEditorStore";
 
 type MBodyComponent = React.ComponentType<IBodyProps>;
 
@@ -63,7 +64,9 @@ export function FileBodyFactory({
         });
     }, [mxEvent, mediaEventHelper, forExport, showFileInfo, timelineRenderingType, vm]);
 
-    return <FileBodyView vm={vm} refIFrame={refIFrame} refLink={refLink} className="mx_MFileBody" />;
+    return <FileBodyView vm={vm} refIFrame={refIFrame} refLink={refLink} className="mx_MFileBody" onEditClick={
+        FileEditorStore.canOpen(mxEvent) ? () => { FileEditorStore.instance.open(mxEvent) } : undefined
+    } />;
 }
 
 export function VideoBodyFactory({

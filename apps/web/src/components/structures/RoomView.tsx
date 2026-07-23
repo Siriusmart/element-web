@@ -142,10 +142,11 @@ import { EncryptionEventViewModel } from "../../viewmodels/room/timeline/event-t
 import { ModuleApi } from "../../modules/Api.ts";
 import { RoomUploadContextProvider } from "../../viewmodels/room/RoomUploadViewModel.tsx";
 import { EventPresentationContextProvider } from "../../utils/EventPresentationContextProvider";
+import FileEditorStore from "../../stores/FileEditorStore.ts";
 
 const DEBUG = false;
 const PREVENT_MULTIPLE_JITSI_WITHIN = 30_000;
-let debuglog = function (msg: string): void {};
+let debuglog = function(msg: string): void { };
 
 const BROWSER_SUPPORTS_SANDBOX = "sandbox" in document.createElement("iframe");
 
@@ -598,6 +599,9 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
     };
 
     private getMainSplitContentType = (room: Room): MainSplitContentType => {
+        if (!FileEditorStore.instance.isEmpty) {
+            return MainSplitContentType.FileEditor;
+        }
         if (this.roomViewStore.isViewingCall() || isVideoRoom(room)) {
             return MainSplitContentType.Call;
         }
@@ -660,6 +664,11 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             promptAskToJoin: promptAskToJoin,
             viewRoomOpts: viewRoomOpts,
         };
+
+        if (room && newState.mainSplitContentType === MainSplitContentType.FileEditor) {
+            this.context.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }, true, room.roomId);
+            newState.showRightPanel = true;
+        }
 
         if (
             newState.mainSplitContentType === MainSplitContentType.Timeline &&
@@ -805,8 +814,8 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             this.setupRoom(newState.room, newState.roomId, !!newState.joining, !!newState.shouldPeek);
         }
 
-        // We don't block the initial setup but we want to make it early to not block the timeline rendering
-        const isRoomEncrypted = await this.getIsRoomEncrypted(newState.roomId);
+        const isRoomEncrypted: boolean = newState.room?.hasEncryptionStateEvent() ?? await this.getIsRoomEncrypted(newState.roomId);
+
         this.setState({
             isRoomEncrypted,
             ...(isRoomEncrypted &&
@@ -981,6 +990,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
         WidgetEchoStore.on(UPDATE_EVENT, this.onWidgetEchoStoreUpdate);
         this.context.widgetStore.on(UPDATE_EVENT, this.onWidgetStoreUpdate);
+        FileEditorStore.instance.on(UPDATE_EVENT, this.onFileEditorStoreUpdate);
 
         this.context.resizeNotifier.on("isResizing", this.onIsResizing);
 
@@ -1097,6 +1107,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         this.context.rightPanelStore.off(UPDATE_EVENT, this.onRightPanelStoreUpdate);
         WidgetEchoStore.removeListener(UPDATE_EVENT, this.onWidgetEchoStoreUpdate);
         this.context.widgetStore.removeListener(UPDATE_EVENT, this.onWidgetStoreUpdate);
+        FileEditorStore.instance.removeListener(UPDATE_EVENT, this.onFileEditorStoreUpdate);
 
         this.context.resizeNotifier.off("isResizing", this.onIsResizing);
 
@@ -2686,6 +2697,17 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                         {previewBar}
                     </>
                 );
+                break;
+            }
+
+            case MainSplitContentType.FileEditor: {
+                mainSplitContentClassName = "mx_MainSplit_fileEdit";
+                mainSplitBody = (
+                    <div>
+                        testing
+                    </div>
+                );
+                break;
             }
         }
         const mainSplitContentClasses = classNames("mx_RoomView_body", mainSplitContentClassName);
@@ -2745,6 +2767,14 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                 </div>
             </ScopedRoomContextProvider>
         );
+    }
+
+    private onFileEditorStoreUpdate = () => {
+        if (!this.state?.room) return;
+
+        const mainSplitContentType = this.getMainSplitContentType(this.state.room);
+        this.context.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }, true, this.state.room.roomId);
+        this.setState({ mainSplitContentType });
     }
 }
 
