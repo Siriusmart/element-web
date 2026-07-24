@@ -64,9 +64,21 @@ export function FileBodyFactory({
         });
     }, [mxEvent, mediaEventHelper, forExport, showFileInfo, timelineRenderingType, vm]);
 
-    return <FileBodyView vm={vm} refIFrame={refIFrame} refLink={refLink} className="mx_MFileBody" onEditClick={
-        FileEditorStore.canOpen(mxEvent) ? () => { FileEditorStore.instance.open(mxEvent) } : undefined
-    } />;
+    return (
+        <FileBodyView
+            vm={vm}
+            refIFrame={refIFrame}
+            refLink={refLink}
+            className="mx_MFileBody"
+            onEditClick={
+                FileEditorStore.canOpen(mxEvent)
+                    ? () => {
+                          FileEditorStore.instance.open(mxEvent);
+                      }
+                    : undefined
+            }
+        />
+    );
 }
 
 export function VideoBodyFactory({

@@ -13,12 +13,12 @@ import { UPDATE_EVENT } from "./AsyncStore";
 import { mediaFromContent } from "../customisations/Media";
 
 interface PdfEditorTab {
-    type: "pdf"
+    type: "pdf";
 }
 
 type FileEditorTab = PdfEditorTab & {
-    event: MatrixEvent,
-    fileUrl: string | "loading"
+    event: MatrixEvent;
+    fileUrl: string | "loading";
 };
 
 export default class FileEditorStore extends EventEmitter {
@@ -47,7 +47,7 @@ export default class FileEditorStore extends EventEmitter {
     }
 
     public open(event: MatrixEvent): void {
-        const existingTabIndex = this.tabs.findIndex(tab => tab.event.getId() === event.getId());
+        const existingTabIndex = this.tabs.findIndex((tab) => tab.event.getId() === event.getId());
 
         if (existingTabIndex !== -1) {
             this.focusedTab = existingTabIndex;
@@ -56,17 +56,18 @@ export default class FileEditorStore extends EventEmitter {
 
         // TODO: encrypted pdf files not supported
         const content = event.getContent<MediaEventContent>();
-        mediaFromContent(content).downloadSource()
-            .then(res => res.blob())
-            .then(blob => {
+        mediaFromContent(content)
+            .downloadSource()
+            .then((res) => res.blob())
+            .then((blob) => {
                 const fileUrl = URL.createObjectURL(blob);
-                console.log("the url is", fileUrl)
+                console.log("the url is", fileUrl);
                 switch (content.info?.mimetype) {
                     case "application/pdf":
                         this.tabs.push({
                             type: "pdf",
                             event,
-                            fileUrl
+                            fileUrl,
                         });
                         break;
                     default:
@@ -75,7 +76,7 @@ export default class FileEditorStore extends EventEmitter {
 
                 this.focusedTab = this.tabs.length - 1;
                 this.emit(UPDATE_EVENT);
-            })
+            });
     }
 
     /*

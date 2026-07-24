@@ -147,7 +147,7 @@ import FileEditorStore from "../../stores/FileEditorStore.ts";
 
 const DEBUG = false;
 const PREVENT_MULTIPLE_JITSI_WITHIN = 30_000;
-let debuglog = function(msg: string): void { };
+let debuglog = function (msg: string): void {};
 
 const BROWSER_SUPPORTS_SANDBOX = "sandbox" in document.createElement("iframe");
 
@@ -815,7 +815,8 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             this.setupRoom(newState.room, newState.roomId, !!newState.joining, !!newState.shouldPeek);
         }
 
-        const isRoomEncrypted: boolean = newState.room?.hasEncryptionStateEvent() ?? await this.getIsRoomEncrypted(newState.roomId);
+        const isRoomEncrypted: boolean =
+            newState.room?.hasEncryptionStateEvent() ?? (await this.getIsRoomEncrypted(newState.roomId));
 
         this.setState({
             isRoomEncrypted,
@@ -2703,9 +2704,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
             case MainSplitContentType.FileEditor: {
                 mainSplitContentClassName = "mx_MainSplit_fileEdit";
-                mainSplitBody = (
-                    <PdfEditor src={FileEditorStore.instance.focusedUrl} />
-                );
+                mainSplitBody = <PdfEditor src={FileEditorStore.instance.focusedUrl} />;
                 break;
             }
         }
@@ -2774,7 +2773,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         const mainSplitContentType = this.getMainSplitContentType(this.state.room);
         this.context.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }, true, this.state.room.roomId);
         this.setState({ mainSplitContentType });
-    }
+    };
 }
 
 class CannotDetermineUserError extends Error {

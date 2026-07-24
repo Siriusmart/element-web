@@ -185,7 +185,13 @@ function getInfoIcon(infoIcon?: FileBodyViewInfoIcon): ComponentType<React.SVGAt
  * <FileBodyView vm={fileBodyViewModel} />
  * ```
  */
-export function FileBodyView({ vm, refIFrame, refLink, className, onEditClick }: Readonly<FileBodyViewProps>): JSX.Element {
+export function FileBodyView({
+    vm,
+    refIFrame,
+    refLink,
+    className,
+    onEditClick,
+}: Readonly<FileBodyViewProps>): JSX.Element {
     const { translate: _t } = useI18n();
 
     const {
@@ -219,14 +225,13 @@ export function FileBodyView({ vm, refIFrame, refLink, className, onEditClick }:
                 >
                     <span>{resolvedInfoLabel}</span>
                 </Button>
-                {
-                    onEditClick &&
+                {onEditClick && (
                     <div className={styles.rightButtonsContainer}>
                         <Button onClick={onEditClick}>
                             <EditIcon />
                         </Button>
                     </div>
-                }
+                )}
             </MediaBody>
         </Tooltip>
     ) : null;
