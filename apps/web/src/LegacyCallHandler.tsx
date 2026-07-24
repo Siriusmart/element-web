@@ -53,6 +53,7 @@ import { isNotNull } from "./Typeguards";
 import { BackgroundAudio } from "./audio/BackgroundAudio";
 import { Jitsi } from "./widgets/Jitsi.ts";
 import { type SDKContextClass } from "./contexts/SDKContextClass.ts";
+import FileEditorStore from "./stores/FileEditorStore.ts";
 
 export const PROTOCOL_PSTN = "m.protocol.pstn";
 export const PROTOCOL_PSTN_PREFIXED = "im.vector.protocol.pstn";
@@ -312,7 +313,7 @@ export default class LegacyCallHandler extends TypedEventEmitter<LegacyCallHandl
 
     public getAllActiveCallsForPip(roomId: string): MatrixCall[] {
         const room = MatrixClientPeg.safeGet().getRoom(roomId);
-        if (room && this.sdkContext.widgetLayoutStore.hasMaximisedWidget(room)) {
+        if ((room && this.sdkContext.widgetLayoutStore.hasMaximisedWidget(room)) || !FileEditorStore.instance.isEmpty) {
             // This checks if there is space for the call view in the aux panel
             // If there is no space any call should be displayed in PiP
             return this.getAllActiveCalls();
