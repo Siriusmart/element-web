@@ -10,12 +10,16 @@ import { MatrixEvent } from "matrix-js-sdk/src/matrix";
 import { MediaEventContent } from "matrix-js-sdk/src/types";
 import { EventType, MsgType } from "matrix-js-sdk/src/matrix";
 import { UPDATE_EVENT } from "./AsyncStore";
+import { mediaFromContent } from "../customisations/Media";
 
 interface PdfEditorTab {
     type: "pdf"
 }
 
-type FileEditorTab = PdfEditorTab & { event: MatrixEvent };
+type FileEditorTab = PdfEditorTab & {
+    event: MatrixEvent,
+    fileUrl: string | "loading"
+};
 
 export default class FileEditorStore extends EventEmitter {
     private static internalInstance: FileEditorStore;
@@ -43,7 +47,6 @@ export default class FileEditorStore extends EventEmitter {
     }
 
     public open(event: MatrixEvent): void {
-        console.log(event)
         const existingTabIndex = this.tabs.findIndex(tab => tab.event.getId() === event.getId());
 
         if (existingTabIndex !== -1) {
@@ -51,19 +54,36 @@ export default class FileEditorStore extends EventEmitter {
             return;
         }
 
+        // TODO: encrypted pdf files not supported
         const content = event.getContent<MediaEventContent>();
-        switch (content.info?.mimetype) {
-            case "application/pdf":
-                this.tabs.push({
-                    type: "pdf",
-                    event
-                });
-                break;
-            default:
-                throw new Error("unsupported mimetype");
-        }
+        mediaFromContent(content).downloadSource()
+            .then(res => res.blob())
+            .then(blob => {
+                const fileUrl = URL.createObjectURL(blob);
+                console.log("the url is", fileUrl)
+                switch (content.info?.mimetype) {
+                    case "application/pdf":
+                        this.tabs.push({
+                            type: "pdf",
+                            event,
+                            fileUrl
+                        });
+                        break;
+                    default:
+                        throw new Error("unsupported mimetype");
+                }
 
-        this.focusedTab = this.tabs.length - 1;
-        this.emit(UPDATE_EVENT);
+                this.focusedTab = this.tabs.length - 1;
+                this.emit(UPDATE_EVENT);
+            })
+    }
+
+    /*
+     * string - the URL
+     * "loading" - loading
+     * undefined - not focused on any tab
+     */
+    public get focusedUrl(): string | "loading" | undefined {
+        return this.tabs[this.focusedTab]?.fileUrl;
     }
 }
