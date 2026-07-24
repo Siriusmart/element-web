@@ -1,6 +1,6 @@
 # @element-hq/pdfjs-viewer-assets
 
-> [!TLDR]
+> [!NOTE]
 >
 > This is just the extracted release zip file from mozilla/pdf.js, becuase of CSP we need to copy its content to webapp/ on build.
 
