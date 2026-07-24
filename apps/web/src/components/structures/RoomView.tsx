@@ -48,7 +48,6 @@ import { type ViewRoomOpts } from "@matrix-org/react-sdk-module-api/lib/lifecycl
 import { type RoomViewProps } from "@element-hq/element-web-module-api";
 import {
     EncryptionEventView,
-    PdfEditor,
     RoomStatusBarView,
     useCreateAutoDisposedViewModel,
 } from "@element-hq/web-shared-components";
@@ -2704,7 +2703,12 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
             case MainSplitContentType.FileEditor: {
                 mainSplitContentClassName = "mx_MainSplit_fileEdit";
-                mainSplitBody = <PdfEditor src={FileEditorStore.instance.focusedUrl} />;
+                mainSplitBody = (
+                    <div
+                        ref={(elem) => FileEditorStore.instance.setBounding(elem)}
+                        style={{ width: "100%", height: "100%" }}
+                    ></div>
+                );
                 break;
             }
         }

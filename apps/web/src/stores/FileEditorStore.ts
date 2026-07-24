@@ -18,13 +18,17 @@ interface PdfEditorTab {
 
 type FileEditorTab = PdfEditorTab & {
     event: MatrixEvent;
-    fileUrl: string | "loading";
+    /*
+     * null means loading
+     */
+    fileUrl: string | null;
 };
 
 export default class FileEditorStore extends EventEmitter {
     private static internalInstance: FileEditorStore;
     private tabs: FileEditorTab[] = [];
     private focusedTab: number = -1;
+    private htmlBounding: HTMLElement | null = null;
 
     public static get instance(): FileEditorStore {
         if (!FileEditorStore.internalInstance) {
@@ -51,6 +55,7 @@ export default class FileEditorStore extends EventEmitter {
 
         if (existingTabIndex !== -1) {
             this.focusedTab = existingTabIndex;
+            this.emit(UPDATE_EVENT);
             return;
         }
 
@@ -61,7 +66,6 @@ export default class FileEditorStore extends EventEmitter {
             .then((res) => res.blob())
             .then((blob) => {
                 const fileUrl = URL.createObjectURL(blob);
-                console.log("the url is", fileUrl);
                 switch (content.info?.mimetype) {
                     case "application/pdf":
                         this.tabs.push({
@@ -79,12 +83,24 @@ export default class FileEditorStore extends EventEmitter {
             });
     }
 
-    /*
-     * string - the URL
-     * "loading" - loading
-     * undefined - not focused on any tab
-     */
-    public get focusedUrl(): string | "loading" | undefined {
-        return this.tabs[this.focusedTab]?.fileUrl;
+    public get tabCount(): number {
+        return this.tabs.length;
+    }
+
+    public get tabFocused(): number | undefined {
+        return this.focusedTab === -1 ? undefined : this.focusedTab;
+    }
+
+    public tabAt(index: number): FileEditorTab | undefined {
+        return this.tabs[index];
+    }
+
+    public setBounding(elem: HTMLElement | null): void {
+        this.htmlBounding = elem;
+        this.emit(UPDATE_EVENT);
+    }
+
+    public get boundingElem(): HTMLElement | null {
+        return this.htmlBounding;
     }
 }
