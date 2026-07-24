@@ -1,0 +1,15 @@
+{
+    "name": "@element-hq/pdfjs-viewer-assets",
+    "version": "6.1.200",
+    "description": "Vendored Mozilla pdf.js prebuilt viewer assets, self-hosted and served same-origin so the viewer runs under Element's strict CSP (no inline scripts, no unsafe-eval).",
+    "private": true,
+    "type": "module",
+    "license": "Apache-2.0",
+    "files": [
+        "web",
+        "build"
+    ],
+    "scripts": {
+        "fetch": "node scripts/fetch-pdfjs.mjs"
+    }
+}

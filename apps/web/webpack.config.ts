@@ -722,6 +722,16 @@ export default (env: string, argv: Record<string, any>): webpack.Configuration =
                         context: path.join(getPackageRoot("@element-hq/element-call-embedded"), "dist"),
                         to: path.join(__dirname, "webapp", "widgets", "element-call"),
                     },
+                    // Self-hosted Mozilla pdf.js viewer (served same-origin at /pdfjs so
+                    // it runs under the strict CSP). Served to desktop too, since the
+                    // whole webapp/ tree is packaged into webapp.asar. Referenced by a
+                    // fixed monorepo-relative path — the package is a workspace member,
+                    // so its location doesn't vary the way an npm dependency's would.
+                    {
+                        from: "{web,build}/**",
+                        context: path.resolve(__dirname, "../../packages/pdfjs-viewer-assets"),
+                        to: path.join(__dirname, "webapp", "pdfjs"),
+                    },
                     // Mobile guide assets
                     {
                         from: "assets/**",
