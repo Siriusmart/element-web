@@ -2,7 +2,7 @@ import React, { CSSProperties, JSX, useLayoutEffect, useReducer, useState } from
 import { useEventEmitterState } from "../../hooks/useEventEmitter";
 import { UPDATE_EVENT } from "../../stores/AsyncStore";
 import FileEditorStore from "../../stores/FileEditorStore";
-import { PdfEditor } from "@element-hq/web-shared-components";
+import { PdfEditor, FileEditorTabBar } from "@element-hq/web-shared-components";
 import ResizeNotifier from "../../utils/ResizeNotifier";
 
 interface Props {
@@ -60,22 +60,33 @@ export function FileEditorContainer({ resizeNotifier }: Props): JSX.Element | nu
         rect === null
             ? { display: "none" }
             : {
-                  position: "fixed",
-                  top: rect.top,
-                  left: rect.left + 10,
-                  // leave a gap for the resize handle to show
-                  width: `${rect.width - 20}px`,
-                  height: `${rect.height}px`,
-                  display: "block",
-                  // when resizing, move the editor behind the drag handle to
-                  // - allow mouse event to be captured by the drag handle
-                  // - allow drag handle to be above the editor split visually
-                  zIndex: isResizing ? -100 : 0,
-              };
+                position: "fixed",
+                top: rect.top,
+                left: rect.left + 10,
+                // leave a gap for the resize handle to show
+                width: `${rect.width - 20}px`,
+                height: `${rect.height}px`,
+                display: "block",
+                // when resizing, move the editor behind the drag handle to
+                // - allow mouse event to be captured by the drag handle
+                // - allow drag handle to be above the editor split visually
+                zIndex: isResizing ? -100 : 0,
+            };
 
     const instance = FileEditorStore.instance;
     return (
         <div style={containerStyle}>
+            {instance.tabCount >= 2 && <FileEditorTabBar selectedIndex={instance.tabFocused!} onFocus={(i) => instance.setFocus(i)} onClose={(i) => instance.closeTab(i)} entries={
+                Array.from({ length: instance.tabCount }).map((_, i) => {
+                    const tab = instance.tabAt(i);
+                    switch (tab?.fileUrl.status) {
+                        case "loaded":
+                            return { display: tab.fileUrl.url.split("/").pop()?.substring(0, 8)! }
+                        default:
+                            return { display: `${tab?.fileUrl.status}` }
+                    }
+                })
+            } />}
             {Array.from({ length: instance.tabCount }).map((_, i) => {
                 const tab = instance.tabAt(i);
                 switch (tab?.fileUrl.status) {

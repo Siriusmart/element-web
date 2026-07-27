@@ -131,4 +131,22 @@ export default class FileEditorStore extends EventEmitter {
     public get boundingElem(): HTMLElement | null {
         return this.htmlBounding;
     }
+
+    public setFocus(index: number): void {
+        // TODO range check
+        if (this.focusedTab === index) return;
+        this.focusedTab = index;
+
+        this.emit(UPDATE_EVENT);
+    }
+
+    public closeTab(index: number): void {
+        // TODO range check
+        this.tabs.splice(index, 1);
+        if (this.focusedTab >= this.tabCount) {
+            this.focusedTab--;
+        }
+
+        this.emit(UPDATE_EVENT);
+    }
 }

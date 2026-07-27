@@ -78,6 +78,7 @@
         "linkifyjs": "4.3.3",
         "lodash": "npm:lodash-es@^4.17.21",
         "matrix-web-i18n": "catalog:",
+        "radix-ui": "^1.6.7",
         "react-blurhash": "^0.3.0",
         "react-merge-refs": "^3.0.2",
         "react-resizable-panels": "4.12.2",

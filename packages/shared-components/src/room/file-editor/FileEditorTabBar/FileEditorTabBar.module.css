@@ -1,0 +1,36 @@
+.tabDiv {
+    display: inline-block;
+    border-left: 1px solid black;
+    border-top: 1px solid black;
+    border-bottom: 1px solid black;
+    margin-top: 1em;
+    background-color: white;
+}
+
+.tabDiv:last-of-type {
+    border-right: 1px solid black;
+}
+
+.tabSelected {
+    background-color: darkorange;
+    color: white;
+}
+
+.tabClose {
+    border: none;
+    background-color: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.tabName {
+    border: none;
+    background-color: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.tabRoot {
+    width: 100%;
+    background-color: black;
+}
