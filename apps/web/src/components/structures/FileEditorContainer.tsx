@@ -3,6 +3,11 @@ import { useEventEmitterState } from "../../hooks/useEventEmitter";
 import { UPDATE_EVENT } from "../../stores/AsyncStore";
 import FileEditorStore from "../../stores/FileEditorStore";
 import { PdfEditor } from "@element-hq/web-shared-components";
+import ResizeNotifier from "../../utils/ResizeNotifier";
+
+interface Props {
+    resizeNotifier: ResizeNotifier;
+}
 
 function useSlotRect(slot: HTMLElement | null): DOMRect | null {
     const [rect, setRect] = useState<DOMRect | null>(null);
@@ -36,7 +41,7 @@ function useSlotRect(slot: HTMLElement | null): DOMRect | null {
     return rect;
 }
 
-export function FileEditorContainer(): JSX.Element | null {
+export function FileEditorContainer({ resizeNotifier }: Props): JSX.Element | null {
     const focusedTab = useEventEmitterState(FileEditorStore.instance, UPDATE_EVENT, () => {
         const instance = FileEditorStore.instance;
         if (instance.tabFocused !== undefined) {
@@ -48,6 +53,7 @@ export function FileEditorContainer(): JSX.Element | null {
         UPDATE_EVENT,
         () => FileEditorStore.instance.boundingElem,
     );
+    const isResizing = useEventEmitterState(resizeNotifier, "isResizing", () => resizeNotifier.isResizing);
 
     const rect = useSlotRect(elem);
 
@@ -60,9 +66,14 @@ export function FileEditorContainer(): JSX.Element | null {
                   position: "fixed",
                   top: rect.top,
                   left: rect.left,
-                  width: `${rect.width}px`,
+                  // leave a gap for the resize handle to show
+                  width: `${rect.width - 10}px`,
                   height: `${rect.height}px`,
                   display: "block",
+                  // when resizing, move the editor behind the drag handle to
+                  // - allow mouse event to be captured by the drag handle
+                  // - allow drag handle to be above the editor split visually
+                  zIndex: isResizing ? -100 : 0,
               };
 
     return (

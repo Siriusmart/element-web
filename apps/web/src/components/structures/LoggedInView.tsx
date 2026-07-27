@@ -738,7 +738,7 @@ class LoggedInView extends React.Component<IProps, IState> {
                     <div className={bodyClasses}>{content}</div>
                 </div>
                 <PipContainer />
-                <FileEditorContainer />
+                <FileEditorContainer resizeNotifier={this.context.resizeNotifier} />
                 <NonUrgentToastContainer />
                 {audioFeedArraysForCalls}
             </MatrixClientContextProvider>
