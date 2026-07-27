@@ -665,7 +665,11 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             viewRoomOpts: viewRoomOpts,
         };
 
-        if (room && newState.mainSplitContentType === MainSplitContentType.FileEditor) {
+        if (
+            room &&
+            newState.mainSplitContentType === MainSplitContentType.FileEditor &&
+            this.state.mainSplitContentType !== MainSplitContentType.FileEditor
+        ) {
             this.context.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }, true, room.roomId);
             newState.showRightPanel = true;
         }
@@ -2775,8 +2779,10 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         if (!this.state?.room) return;
 
         const mainSplitContentType = this.getMainSplitContentType(this.state.room);
-        this.context.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }, true, this.state.room.roomId);
-        this.setState({ mainSplitContentType });
+        if (mainSplitContentType !== this.state.mainSplitContentType) {
+            this.context.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }, true, this.state.room.roomId);
+            this.setState({ mainSplitContentType });
+        }
     };
 }
 

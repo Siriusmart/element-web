@@ -65,9 +65,9 @@ export function FileEditorContainer({ resizeNotifier }: Props): JSX.Element | nu
             : {
                   position: "fixed",
                   top: rect.top,
-                  left: rect.left,
+                  left: rect.left + 10,
                   // leave a gap for the resize handle to show
-                  width: `${rect.width - 10}px`,
+                  width: `${rect.width - 20}px`,
                   height: `${rect.height}px`,
                   display: "block",
                   // when resizing, move the editor behind the drag handle to
