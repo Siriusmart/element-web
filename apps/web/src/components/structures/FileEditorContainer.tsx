@@ -1,4 +1,4 @@
-import React, { CSSProperties, JSX, useLayoutEffect, useState } from "react";
+import React, { CSSProperties, JSX, useLayoutEffect, useReducer, useState } from "react";
 import { useEventEmitterState } from "../../hooks/useEventEmitter";
 import { UPDATE_EVENT } from "../../stores/AsyncStore";
 import FileEditorStore from "../../stores/FileEditorStore";
@@ -42,12 +42,9 @@ function useSlotRect(slot: HTMLElement | null): DOMRect | null {
 }
 
 export function FileEditorContainer({ resizeNotifier }: Props): JSX.Element | null {
-    const focusedTab = useEventEmitterState(FileEditorStore.instance, UPDATE_EVENT, () => {
-        const instance = FileEditorStore.instance;
-        if (instance.tabFocused !== undefined) {
-            return instance.tabAt(instance.tabFocused);
-        }
-    });
+    const [_, cacheBuster] = useReducer((x) => x + 1, 0);
+    useEventEmitterState(FileEditorStore.instance, UPDATE_EVENT, cacheBuster); // that's fine, i dont need anything from it, i just need to rerender on update
+
     const elem = useEventEmitterState(
         FileEditorStore.instance,
         UPDATE_EVENT,
@@ -57,9 +54,9 @@ export function FileEditorContainer({ resizeNotifier }: Props): JSX.Element | nu
 
     const rect = useSlotRect(elem);
 
-    if (focusedTab === undefined || focusedTab.fileUrl === null) return null;
+    if (FileEditorStore.instance.isEmpty) return null;
 
-    const styles: CSSProperties =
+    const containerStyle: CSSProperties =
         rect === null
             ? { display: "none" }
             : {
@@ -76,9 +73,29 @@ export function FileEditorContainer({ resizeNotifier }: Props): JSX.Element | nu
                   zIndex: isResizing ? -100 : 0,
               };
 
+    const instance = FileEditorStore.instance;
     return (
-        <div id="fileeditor" style={styles}>
-            <PdfEditor src={focusedTab.fileUrl} />
+        <div style={containerStyle}>
+            {Array.from({ length: instance.tabCount }).map((_, i) => {
+                const tab = instance.tabAt(i);
+                switch (tab?.fileUrl.status) {
+                    case "failed":
+                        return "failed";
+                    case "loading":
+                        return "loading";
+                    case "loaded":
+                        const style: CSSProperties = {
+                            display: i === instance.tabFocused ? "block" : "none",
+                            width: "100%",
+                            height: "100%",
+                        };
+                        return (
+                            <div style={style}>
+                                <PdfEditor src={tab.fileUrl.url} />
+                            </div>
+                        );
+                }
+            })}
         </div>
     );
 }

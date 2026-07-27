@@ -16,12 +16,25 @@ interface PdfEditorTab {
     type: "pdf";
 }
 
+interface FileUrlLoading {
+    status: "loading";
+}
+
+interface FileUrlLoaded {
+    status: "loaded";
+    url: string;
+}
+
+interface FileUrlFailed {
+    status: "failed";
+    reason: string;
+}
+
+type FileUrl = FileUrlFailed | FileUrlLoaded | FileUrlLoading;
+
 type FileEditorTab = PdfEditorTab & {
     event: MatrixEvent;
-    /*
-     * null means loading
-     */
-    fileUrl: string | null;
+    fileUrl: FileUrl;
 };
 
 export default class FileEditorStore extends EventEmitter {
@@ -61,6 +74,25 @@ export default class FileEditorStore extends EventEmitter {
 
         // TODO: encrypted pdf files not supported
         const content = event.getContent<MediaEventContent>();
+
+        let editorType: FileEditorTab["type"];
+        switch (content.info?.mimetype) {
+            case "application/pdf":
+                editorType = "pdf";
+                break;
+            default:
+                throw new Error(`editor does not support mimetype ${content.info?.mimetype}`);
+        }
+
+        const newTab: FileEditorTab = {
+            type: editorType,
+            event,
+            fileUrl: { status: "loading" },
+        };
+        this.tabs.push(newTab);
+        this.focusedTab = this.tabs.length - 1;
+        this.emit(UPDATE_EVENT);
+
         mediaFromContent(content)
             .downloadSource()
             .then((res) => res.blob())
@@ -68,17 +100,13 @@ export default class FileEditorStore extends EventEmitter {
                 const fileUrl = URL.createObjectURL(blob);
                 switch (content.info?.mimetype) {
                     case "application/pdf":
-                        this.tabs.push({
-                            type: "pdf",
-                            event,
-                            fileUrl,
-                        });
+                        newTab.fileUrl = { status: "loaded", url: fileUrl };
                         break;
-                    default:
-                        throw new Error("unsupported mimetype");
                 }
-
-                this.focusedTab = this.tabs.length - 1;
+                this.emit(UPDATE_EVENT);
+            })
+            .catch((e) => {
+                newTab.fileUrl = { status: "failed", reason: `${e}` };
                 this.emit(UPDATE_EVENT);
             });
     }
