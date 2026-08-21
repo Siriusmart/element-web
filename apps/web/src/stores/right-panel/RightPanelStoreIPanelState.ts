@@ -25,6 +25,10 @@ export interface IRightPanelCardState {
     initialEventScrollIntoView?: boolean;
     // room summary
     focusRoomSearch?: boolean;
+    // DEMO: PdfViewer. Note this is a plain string, unlike the fields above which hold live
+    // js-sdk objects (MatrixEvent/RoomMember) and therefore have to be reduced to IDs when
+    // stored and re-resolved against a Room when loaded. A string survives the round-trip as-is.
+    pdfUrl?: string;
 }
 
 export interface IRightPanelCardStateStored {
@@ -38,6 +42,8 @@ export interface IRightPanelCardStateStored {
     initialEventId?: string;
     isInitialEventHighlighted?: boolean;
     initialEventScrollIntoView?: boolean;
+    // DEMO: PdfViewer
+    pdfUrl?: string;
 }
 
 export interface IRightPanelCard {
@@ -82,6 +88,8 @@ export function convertCardToStore(panelState: IRightPanelCard): IRightPanelCard
         memberInfoEventId: !!state?.memberInfoEvent?.getId() ? state.memberInfoEvent.getId() : undefined,
         initialEventId: !!state?.initialEvent?.getId() ? state.initialEvent.getId() : undefined,
         memberId: !!state?.member?.userId ? state.member.userId : undefined,
+        // DEMO: no reduction needed, it is already a string
+        pdfUrl: state.pdfUrl,
     };
 
     return { state: stateStored, phase: panelState.phase };
@@ -101,6 +109,8 @@ function convertStoreToCard(panelStateStore: IRightPanelCardStored, room: Room):
             : undefined,
         initialEvent: !!stateStored?.initialEventId ? room.findEventById(stateStored.initialEventId) : undefined,
         member: (!!stateStored?.memberId && room.getMember(stateStored.memberId)) || undefined,
+        // DEMO: no re-resolution needed, unlike the event/member fields above which need `room`
+        pdfUrl: stateStored.pdfUrl,
     };
 
     return { state: state, phase: panelStateStore.phase };

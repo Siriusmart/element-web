@@ -28,6 +28,10 @@ export enum RightPanelPhases {
     // Thread stuff
     ThreadView = "ThreadView",
     ThreadPanel = "ThreadPanel",
+
+    // DEMO: a "global" card, i.e. one that is not scoped to a room and therefore stays
+    // open as you navigate between rooms. See RightPanelStore#setGlobalCard.
+    PdfViewer = "PdfViewer",
 }
 
 export function backLabelForPhase(phase: RightPanelPhases | null): string | null {
