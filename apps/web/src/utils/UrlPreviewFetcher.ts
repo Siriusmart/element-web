@@ -22,17 +22,197 @@ export const MIN_PREVIEW_PX = 96;
 export const MIN_IMAGE_SIZE_BYTES = 8192;
 
 /**
- * Handles fetching and parsing URL previews.
- * Maintains a cache of previously fetched previews; call `clearCache` when
- * media visibility changes so images are re-fetched with the correct visibility.
+ * Options controlling how a preview is rendered.
+ */
+export interface UrlPreviewRenderOptions {
+    /**
+     * Whether to include the preview image. Pass false when media is hidden.
+     */
+    loadMedia: boolean;
+    /**
+     * Should the link have a tooltip. Should be `true` if the platform does not provide a tooltip.
+     */
+    showTooltips: boolean;
+}
+
+/**
+ * Parse a numeric value from OpenGraph. The OpenGraph spec defines all values as strings
+ * although Synapse may return these values as numbers. To be compatible, test strings
+ * and numbers.
+ * @param value The numeric value
+ * @returns A number if the value parsed correctly, or undefined otherwise.
+ */
+function getNumberFromOpenGraph(value: unknown): number | undefined {
+    if (typeof value === "number") {
+        return value;
+    } else if (typeof value === "string" && value) {
+        const i = Number.parseInt(value, 10);
+        if (!Number.isNaN(i)) return i;
+    }
+    return undefined;
+}
+
+/**
+ * Calculate the best possible title, description and site name from a preview.
+ * @param preview The preview.
+ * @param link The link being previewed.
+ * @returns The metadata values.
+ */
+function getBaseMetadata(
+    preview: UnstableBundledUrlPreviewSingle,
+    link: string,
+): Pick<UrlPreview, "title" | "description" | "siteName"> {
+    let title =
+        typeof preview["og:title"] === "string" && preview["og:title"].trim() ? preview["og:title"].trim() : undefined;
+    let description =
+        typeof preview["og:description"] === "string" && preview["og:description"].trim()
+            ? preview["og:description"].trim()
+            : undefined;
+    const siteName =
+        typeof preview["og:site_name"] === "string" && preview["og:site_name"].trim()
+            ? preview["og:site_name"].trim()
+            : new URL(link).hostname;
+
+    if (!title && description) {
+        title = description;
+        description = undefined;
+    } else if (!title && siteName) {
+        title = siteName;
+    } else if (!title) {
+        title = link;
+    }
+
+    if (description && description.toLowerCase() === siteName.toLowerCase()) {
+        description = undefined;
+    }
+
+    return { title, description: description && decode(description), siteName };
+}
+
+/**
+ * Calculate the best possible author from a preview.
+ * @param preview The preview.
+ * @returns The author value, or undefined if no valid author could be found.
+ */
+function getAuthor(preview: UnstableBundledUrlPreviewSingle): UrlPreview["author"] {
+    let calculatedAuthor: string | undefined;
+    if (preview["og:type"] === "article") {
+        if (typeof preview["article:author"] === "string" && preview["article:author"]) {
+            calculatedAuthor = preview["article:author"];
+        }
+    }
+    if (typeof preview["profile:username"] === "string" && preview["profile:username"]) {
+        calculatedAuthor = preview["profile:username"];
+    }
+    if (calculatedAuthor && URL.canParse(calculatedAuthor)) {
+        return undefined;
+    }
+    return calculatedAuthor;
+}
+
+/**
+ * Calculate whether the provided image from the preview is a full size preview or
+ * a site icon.
+ * @returns `true` if the image should be used as a preview, otherwise `false`
+ */
+function isImagePreview(width?: number, height?: number, bytes?: number): boolean {
+    if (width && width < MIN_PREVIEW_PX) return false;
+    if (height && height < MIN_PREVIEW_PX) return false;
+    if (bytes && bytes < MIN_IMAGE_SIZE_BYTES) return false;
+    return true;
+}
+
+/**
+ * Determine whether a preview carries an image large enough to be rendered as a thumbnail,
+ * rather than as a site icon.
+ * @param preview The preview.
+ * @returns `true` if the preview would render a thumbnail, otherwise `false`.
+ */
+export function hasPreviewImage(preview: UnstableBundledUrlPreviewSingle): boolean {
+    if (typeof preview["og:image"] !== "string") return false;
+    return isImagePreview(
+        getNumberFromOpenGraph(preview["og:image:width"]),
+        getNumberFromOpenGraph(preview["og:image:height"]),
+        getNumberFromOpenGraph(preview["matrix:image:size"]),
+    );
+}
+
+/**
+ * Convert a preview in the MSC4095 bundled format into the shape rendered by the views.
+ * @param preview The preview, either bundled with the event or fetched from the homeserver.
+ * @param client The client used to resolve media.
+ * @param options How the preview should be rendered.
+ */
+export function urlPreviewFromBundle(
+    preview: UnstableBundledUrlPreviewSingle,
+    client: MatrixClient,
+    { loadMedia, showTooltips }: UrlPreviewRenderOptions,
+): UrlPreview {
+    const link = preview.matched_url;
+    const { title, description, siteName } = getBaseMetadata(preview, link);
+    const author = getAuthor(preview);
+
+    let image: UrlPreview["image"];
+    let siteIcon: string | undefined;
+
+    if (typeof preview["og:image"] === "string" && loadMedia) {
+        const mxcImageFull = preview["og:image"];
+        const media = mediaFromMxc(mxcImageFull, client);
+        const declaredHeight = getNumberFromOpenGraph(preview["og:image:height"]);
+        const declaredWidth = getNumberFromOpenGraph(preview["og:image:width"]);
+        const imageSize = getNumberFromOpenGraph(preview["matrix:image:size"]);
+        const alt = typeof preview["og:image:alt"] === "string" ? preview["og:image:alt"] : undefined;
+        const imageType = typeof preview["og:image:type"] === "string" ? preview["og:image:type"] : undefined;
+
+        if (isImagePreview(declaredWidth, declaredHeight, imageSize)) {
+            const width = Math.min(declaredWidth ?? PREVIEW_WIDTH_PX, PREVIEW_WIDTH_PX);
+            const height = thumbHeight(width, declaredHeight, PREVIEW_WIDTH_PX, PREVIEW_WIDTH_PX) ?? PREVIEW_WIDTH_PX;
+            const thumb = media.getThumbnailOfSourceHttp(PREVIEW_WIDTH_PX, PREVIEW_HEIGHT_PX, "scale");
+            const playable = !!preview["og:video"] || !!preview["og:video:type"] || !!preview["og:audio"];
+            // A bundled preview is sender-controlled, so the mxc:// URI may not resolve at all.
+            if (thumb) {
+                image = {
+                    imageThumb: thumb,
+                    imageFull: media.srcHttp ?? thumb,
+                    mxcImageFull,
+                    imageType,
+                    width,
+                    height,
+                    fileSize: imageSize,
+                    alt,
+                    playable,
+                };
+            }
+        } else if (media.srcHttp) {
+            siteIcon = media.srcHttp;
+        }
+    }
+
+    return {
+        link,
+        title,
+        author,
+        description,
+        siteName,
+        siteIcon,
+        ogUrl: preview["og:url"],
+        showTooltipOnLink: !!(link !== title && showTooltips),
+        image,
+    } satisfies UrlPreview;
+}
+
+/**
+ * Handles fetching URL previews from the homeserver.
+ * Previews are returned in the MSC4095 bundled format, so that previews fetched here and
+ * previews bundled with an event can be rendered through {@link urlPreviewFromBundle} alike.
+ * Maintains a cache of previously fetched previews.
  */
 export class UrlPreviewFetcher {
-    private readonly cache = new Map<string, UrlPreview>();
+    private readonly cache = new Map<string, UnstableBundledUrlPreviewSingle>();
 
     public constructor(
         private readonly client: MatrixClient,
         private readonly previewRequestTs: number,
-        private readonly showTooltips: boolean,
     ) {}
 
     public clearCache(): void {
@@ -40,100 +220,11 @@ export class UrlPreviewFetcher {
     }
 
     /**
-     * Parse a numeric value from OpenGraph. The OpenGraph spec defines all values as strings
-     * although Synapse may return these values as numbers. To be compatible, test strings
-     * and numbers.
-     * @param value The numeric value
-     * @returns A number if the value parsed correctly, or undefined otherwise.
-     */
-    private static getNumberFromOpenGraph(value: number | string | undefined): number | undefined {
-        if (typeof value === "number") {
-            return value;
-        } else if (typeof value === "string" && value) {
-            const i = Number.parseInt(value, 10);
-            if (!Number.isNaN(i)) return i;
-        }
-        return undefined;
-    }
-
-    /**
-     * Calculate the best possible title from an opengraph response.
-     * @param response The opengraph response
-     * @param link The link being used to preview.
-     * @returns The title value.
-     */
-    private static getBaseMetadataFromResponse(
-        response: IPreviewUrlResponse,
-        link: string,
-    ): Pick<UrlPreview, "title" | "description" | "siteName"> {
-        let title =
-            typeof response["og:title"] === "string" && response["og:title"].trim()
-                ? response["og:title"].trim()
-                : undefined;
-        let description =
-            typeof response["og:description"] === "string" && response["og:description"].trim()
-                ? response["og:description"].trim()
-                : undefined;
-        const siteName =
-            typeof response["og:site_name"] === "string" && response["og:site_name"].trim()
-                ? response["og:site_name"].trim()
-                : new URL(link).hostname;
-
-        if (!title && description) {
-            title = description;
-            description = undefined;
-        } else if (!title && siteName) {
-            title = siteName;
-        } else if (!title) {
-            title = link;
-        }
-
-        if (description && description.toLowerCase() === siteName.toLowerCase()) {
-            description = undefined;
-        }
-
-        return { title, description: description && decode(description), siteName };
-    }
-
-    /**
-     * Calculate the best possible author from an opengraph response.
-     * @param response The opengraph response
-     * @returns The author value, or undefined if no valid author could be found.
-     */
-    private static getAuthorFromResponse(response: IPreviewUrlResponse): UrlPreview["author"] {
-        let calculatedAuthor: string | undefined;
-        if (response["og:type"] === "article") {
-            if (typeof response["article:author"] === "string" && response["article:author"]) {
-                calculatedAuthor = response["article:author"];
-            }
-        }
-        if (typeof response["profile:username"] === "string" && response["profile:username"]) {
-            calculatedAuthor = response["profile:username"];
-        }
-        if (calculatedAuthor && URL.canParse(calculatedAuthor)) {
-            return undefined;
-        }
-        return calculatedAuthor;
-    }
-
-    /**
-     * Calculate whether the provided image from the preview response is an full size preview or
-     * a site icon.
-     * @returns `true` if the image should be used as a preview, otherwise `false`
-     */
-    private static isImagePreview(width?: number, height?: number, bytes?: number): boolean {
-        if (width && width < MIN_PREVIEW_PX) return false;
-        if (height && height < MIN_PREVIEW_PX) return false;
-        if (bytes && bytes < MIN_IMAGE_SIZE_BYTES) return false;
-        return true;
-    }
-
-    /**
      * Fetch a preview for a single URL, returning a cached result if available.
      * @param link The URL to preview.
-     * @param loadMedia Whether to include the preview image. Pass false when media is hidden.
+     * @returns The preview in the MSC4095 bundled format, or null if there is nothing to render.
      */
-    public async fetchPreview(link: string, loadMedia: boolean): Promise<UrlPreview | null> {
+    public async fetchPreviewBundle(link: string): Promise<UnstableBundledUrlPreviewSingle | null> {
         const cached = this.cache.get(link);
         if (cached) return cached;
 
@@ -149,109 +240,25 @@ export class UrlPreviewFetcher {
             return null;
         }
 
-        const { title, description, siteName } = UrlPreviewFetcher.getBaseMetadataFromResponse(response, link);
-        const author = UrlPreviewFetcher.getAuthorFromResponse(response);
-        const hasImage = response["og:image"] && typeof response["og:image"] === "string";
+        const preview: UnstableBundledUrlPreviewSingle = { ...response, matched_url: link };
 
-        if (title === link && !hasImage) {
+        // Nothing worth rendering: no title beyond the link itself, and no image.
+        if (getBaseMetadata(preview, link).title === link && typeof response["og:image"] !== "string") {
             return null;
         }
 
-        let image: UrlPreview["image"];
-        let siteIcon: string | undefined;
-
-        if (typeof response["og:image"] === "string" && loadMedia) {
-            const mxcImageFull = response["og:image"];
-            const media = mediaFromMxc(response["og:image"], this.client);
-            const declaredHeight = UrlPreviewFetcher.getNumberFromOpenGraph(response["og:image:height"]);
-            const declaredWidth = UrlPreviewFetcher.getNumberFromOpenGraph(response["og:image:width"]);
-            const imageSize = UrlPreviewFetcher.getNumberFromOpenGraph(response["matrix:image:size"]);
-            const alt = typeof response["og:image:alt"] === "string" ? response["og:image:alt"] : undefined;
-            const imageType = typeof response["og:image:type"] === "string" ? response["og:image:type"] : undefined;
-
-            if (UrlPreviewFetcher.isImagePreview(declaredWidth, declaredHeight, imageSize)) {
-                const width = Math.min(declaredWidth ?? PREVIEW_WIDTH_PX, PREVIEW_WIDTH_PX);
-                const height =
-                    thumbHeight(width, declaredHeight, PREVIEW_WIDTH_PX, PREVIEW_WIDTH_PX) ?? PREVIEW_WIDTH_PX;
-                const thumb = media.getThumbnailOfSourceHttp(PREVIEW_WIDTH_PX, PREVIEW_HEIGHT_PX, "scale");
-                const playable = !!response["og:video"] || !!response["og:video:type"] || !!response["og:audio"];
-                if (thumb) {
-                    image = {
-                        imageThumb: thumb,
-                        imageFull: media.srcHttp ?? thumb,
-                        mxcImageFull,
-                        imageType,
-                        width,
-                        height,
-                        fileSize: UrlPreviewFetcher.getNumberFromOpenGraph(response["matrix:image:size"]),
-                        alt,
-                        playable,
-                    };
-                }
-            } else if (media.srcHttp) {
-                siteIcon = media.srcHttp;
-            }
-        }
-
-        const result = {
-            link,
-            title,
-            author,
-            description,
-            siteName,
-            siteIcon,
-            ogUrl: response["og:url"],
-            showTooltipOnLink: !!(link !== title && this.showTooltips),
-            image,
-        } satisfies UrlPreview;
-        this.cache.set(link, result);
-        return result;
+        this.cache.set(link, preview);
+        return preview;
     }
 
-    /*
-     * Convert an MSC4095 URL preview bundle item to a UrlPreview
+    /**
+     * Fetch a preview for a single URL and convert it into the shape rendered by the views.
+     * @param link The URL to preview.
+     * @param options How the preview should be rendered.
      */
-    public previewFromBundle(single: UnstableBundledUrlPreviewSingle): UrlPreview {
-        const preview: UrlPreview = {
-            link: single.matched_url,
-            title: single["og:title"] ?? single.matched_url,
-            siteName: new URL(single.matched_url).hostname,
-            showTooltipOnLink: !!(single.matched_url !== single["og:title"] && this.showTooltips),
-            description: single["og:description"],
-            ogUrl: single["og:url"],
-        };
-
-        // missing fields from the bundle because backend does provide it:
-        // - siteName (can be computed)
-        // - favicon
-        // - media is a video or audio?
-        // TODO in next PR: URL previews in encrypted chat?
-        if (
-            typeof single["og:image"] === "string" &&
-            typeof single["og:image:type"] === "string" &&
-            typeof single["og:image:width"] === "number" &&
-            typeof single["og:image:height"] === "number"
-        ) {
-            const media = mediaFromMxc(single["og:image"], this.client);
-            const thumb = media.getThumbnailOfSourceHttp(PREVIEW_WIDTH_PX, PREVIEW_HEIGHT_PX, "scale");
-
-            // cannot rule out the mxc:// url is malformed because
-            // the sender can specify anything
-            if (media.srcHttp === null || thumb === null) {
-                return preview;
-            }
-
-            preview.image = {
-                imageThumb: thumb,
-                imageFull: media.srcHttp,
-                imageType: single["og:image:type"],
-                mxcImageFull: single["og:image"],
-                width: single["og:image:width"],
-                height: single["og:image:height"],
-                playable: false, // TODO: do we know?
-            };
-        }
-
-        return preview;
+    public async fetchPreview(link: string, options: UrlPreviewRenderOptions): Promise<UrlPreview | null> {
+        const preview = await this.fetchPreviewBundle(link);
+        if (!preview) return null;
+        return urlPreviewFromBundle(preview, this.client, options);
     }
 }

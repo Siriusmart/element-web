@@ -11,7 +11,7 @@ import { MsgType, type MatrixClient } from "matrix-js-sdk/src/matrix";
 import { vi, describe, it, expect, type Mock, type MockedObject } from "vitest";
 
 import { BUNDLED_LINK_PREVIEWS, MAX_PREVIEWS_WHEN_LIMITED, UrlPreviewGroupViewModel } from "./UrlPreviewGroupViewModel";
-import type { UrlPreview } from "@element-hq/web-shared-components";
+import { type UnstableBundledUrlPreviewSingle } from "@element-hq/element-web-module-api";
 import { getMockClientWithEventEmitter, mkEvent } from "test-utils";
 
 const IMAGE_MXC = "mxc://example.org/abc";
@@ -65,19 +65,18 @@ function getViewModel({
 } = {}): {
     vm: UrlPreviewGroupViewModel;
     client: MockedObject<MatrixClient>;
-    onImageClicked: Mock<(preview: UrlPreview) => void>;
+    onImageClicked: Mock<(preview: UnstableBundledUrlPreviewSingle) => void>;
 } {
     const client = getMockClientWithEventEmitter({
         getUrlPreview: vi.fn(),
         mxcUrlToHttp: vi.fn(),
     });
-    const onImageClicked = vi.fn<(preview: UrlPreview) => void>();
+    const onImageClicked = vi.fn<(preview: UnstableBundledUrlPreviewSingle) => void>();
     const vm = new UrlPreviewGroupViewModel({
         client,
         mediaVisible,
         visible,
         onImageClicked,
-        showTooltips: false,
         mxEvent: mkEvent({
             event: true,
             user: "@foo:bar",
@@ -127,9 +126,9 @@ describe("UrlPreviewGroupViewModel", () => {
         const { previews } = vm.getSnapshot();
         expect(previews).toHaveLength(3);
         expect(previews).toMatchObject([
-            { link: "https://example.org/1" },
-            { link: "https://example.org/2" },
-            { link: "https://example.org/3" },
+            { matched_url: "https://example.org/1" },
+            { matched_url: "https://example.org/2" },
+            { matched_url: "https://example.org/3" },
         ]);
     });
     it("should hide preview when invisible", async () => {
@@ -145,7 +144,7 @@ describe("UrlPreviewGroupViewModel", () => {
         expect(vm.getSnapshot()).toMatchSnapshot();
         expect(client.getUrlPreview).not.toHaveBeenCalled();
     });
-    it("should ignore media when mediaVisible is false", async () => {
+    it("should not resolve media, which is left to the view", async () => {
         const { vm, client } = getViewModel({
             mediaVisible: false,
             visible: true,
@@ -196,14 +195,6 @@ describe("UrlPreviewGroupViewModel", () => {
             "og:image:height": 128,
             "og:image:width": 128,
             "matrix:image:size": 10000,
-        });
-        // eslint-disable-next-line no-restricted-properties
-        client.mxcUrlToHttp.mockImplementation((url, width) => {
-            expect(url).toEqual(IMAGE_MXC);
-            if (width) {
-                return "https://example.org/image/thumb";
-            }
-            return "https://example.org/image/src";
         });
         const msg = document.createElement("div");
         msg.innerHTML = '<a href="https://example.org">Test</a>';
@@ -273,27 +264,12 @@ describe("UrlPreviewGroupViewModel", () => {
             msg.innerHTML = '<a href="https://example.org/1">Test1</a><a href="https://example.org/2">Test2</a>';
             await vm.updateEventElement(msg);
             const { previews } = vm.getSnapshot();
-            expect(previews).toMatchObject([
-                {
-                    link: "https://example.org/1",
-                    title: "Bundled one",
-                    description: "First bundled preview",
-                    siteName: "example.org",
-                    ogUrl: "https://example.org/1",
-                },
-                {
-                    link: "https://example.org/2",
-                    title: "Bundled two",
-                    description: "Second bundled preview",
-                    siteName: "example.org",
-                    ogUrl: "https://example.org/2",
-                },
-            ]);
+            expect(previews).toEqual([BUNDLE_PREVIEW_ONE, BUNDLE_PREVIEW_TWO]);
             // Bundled previews are provided inline and must not trigger network fetches.
             expect(client.getUrlPreview).not.toHaveBeenCalled();
         });
 
-        it("should render an image for a bundled preview", async () => {
+        it("should pass the image metadata of a bundled preview through untouched", async () => {
             const { vm, client } = getViewModel({
                 urlPreviewBundleEnabled: true,
                 content: {
@@ -301,20 +277,15 @@ describe("UrlPreviewGroupViewModel", () => {
                     [BUNDLED_LINK_PREVIEWS]: [BUNDLE_PREVIEW_WITH_IMAGE],
                 },
             });
-            // eslint-disable-next-line no-restricted-properties
-            client.mxcUrlToHttp.mockReturnValue("https://example.org/image/src");
             const msg = document.createElement("div");
             msg.innerHTML = '<a href="https://example.org/image">Test</a>';
             await vm.updateEventElement(msg);
             const { previews } = vm.getSnapshot();
-            expect(previews).toHaveLength(1);
-            expect(previews[0].image).toMatchObject({
-                mxcImageFull: IMAGE_MXC,
-                imageType: "image/png",
-                width: 128,
-                height: 128,
-            });
+            expect(previews).toEqual([BUNDLE_PREVIEW_WITH_IMAGE]);
             expect(client.getUrlPreview).not.toHaveBeenCalled();
+            // Resolving the mxc:// URI is the view's job.
+            // eslint-disable-next-line no-restricted-properties
+            expect(client.mxcUrlToHttp).not.toHaveBeenCalled();
         });
 
         it("should limit bundled previews and reveal the rest when the limit is toggled", async () => {
@@ -357,7 +328,7 @@ describe("UrlPreviewGroupViewModel", () => {
             const { previews } = vm.getSnapshot();
             expect(client.getUrlPreview).toHaveBeenCalledWith("https://example.org/1", expect.anything());
             // The fetched preview wins over the ignored bundle entry.
-            expect(previews).toMatchObject([{ title: "This is an example!" }]);
+            expect(previews).toMatchObject([{ "og:title": "This is an example!" }]);
         });
 
         it("should fetch previews instead of using the bundle when the message is not a text message", async () => {
@@ -374,7 +345,7 @@ describe("UrlPreviewGroupViewModel", () => {
             await vm.updateEventElement(msg);
             const { previews } = vm.getSnapshot();
             expect(client.getUrlPreview).toHaveBeenCalledWith("https://example.org/1", expect.anything());
-            expect(previews).toMatchObject([{ title: "This is an example!" }]);
+            expect(previews).toMatchObject([{ "og:title": "This is an example!" }]);
         });
     });
 });

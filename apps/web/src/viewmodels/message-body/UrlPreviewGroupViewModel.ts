@@ -8,15 +8,15 @@
 import { MsgType, type MatrixClient, type MatrixEvent } from "matrix-js-sdk/src/matrix";
 import {
     BaseViewModel,
-    type UrlPreview,
     type UrlPreviewGroupViewActions,
     type UrlPreviewGroupViewSnapshot,
 } from "@element-hq/web-shared-components";
 import { type UrlPreviewVisibilityChanged } from "@matrix-org/analytics-events/types/typescript/UrlPreviewVisibilityChanged";
+import { type UnstableBundledUrlPreviewSingle } from "@element-hq/element-web-module-api";
 
 import { PosthogAnalytics } from "../../PosthogAnalytics";
 import { isPermalinkHost } from "../../utils/permalinks/Permalinks";
-import { UrlPreviewFetcher } from "../../utils/UrlPreviewFetcher";
+import { hasPreviewImage, UrlPreviewFetcher } from "../../utils/UrlPreviewFetcher";
 import { type RoomMessageEventContent } from "../../../@types/url-preview";
 
 // From https://github.com/matrix-org/matrix-spec-proposals/pull/4095
@@ -40,8 +40,7 @@ export interface UrlPreviewGroupViewModelProps {
     mxEvent: MatrixEvent;
     visible: boolean;
     mediaVisible: boolean;
-    showTooltips: boolean;
-    onImageClicked: (preview: UrlPreview) => void;
+    onImageClicked: (preview: UnstableBundledUrlPreviewSingle) => void;
     urlPreviewBundleEnabled: boolean;
 }
 
@@ -120,7 +119,7 @@ export class UrlPreviewGroupViewModel
     /**
      * Called when the user clicks on the preview thumbnail.
      */
-    public readonly onImageClick: (preview: UrlPreview) => void;
+    public readonly onImageClick: (preview: UnstableBundledUrlPreviewSingle) => void;
 
     public constructor(props: UrlPreviewGroupViewModelProps) {
         super(props, {
@@ -134,7 +133,7 @@ export class UrlPreviewGroupViewModel
         this.urlPreviewVisible = props.visible;
         this.mediaVisible = props.mediaVisible;
         this.urlPreviewEnabledByUser = globalThis.localStorage.getItem(this.storageKey) !== "1";
-        this.fetcher = new UrlPreviewFetcher(props.client, props.mxEvent.getTs(), props.showTooltips);
+        this.fetcher = new UrlPreviewFetcher(props.client, props.mxEvent.getTs());
     }
 
     /**
@@ -168,8 +167,7 @@ export class UrlPreviewGroupViewModel
             return;
         }
 
-        const loadMedia = this.visibility === PreviewVisibility.Visible;
-        let previews: (UrlPreview | null)[] | undefined;
+        let previews: (UnstableBundledUrlPreviewSingle | null)[] | undefined;
 
         if (this.visibility <= PreviewVisibility.UserHidden) {
             previews = [];
@@ -180,16 +178,17 @@ export class UrlPreviewGroupViewModel
             const messageContent = content as RoomMessageEventContent;
 
             if (messageContent[BUNDLED_LINK_PREVIEWS] !== undefined) {
-                previews = messageContent[BUNDLED_LINK_PREVIEWS]
-                    .slice(0, this.limitPreviews ? MAX_PREVIEWS_WHEN_LIMITED : undefined)
-                    .map((preview) => this.fetcher.previewFromBundle(preview));
+                previews = messageContent[BUNDLED_LINK_PREVIEWS].slice(
+                    0,
+                    this.limitPreviews ? MAX_PREVIEWS_WHEN_LIMITED : undefined,
+                );
             }
         }
 
         previews ??= await Promise.all(
             this.links
                 .slice(0, this.limitPreviews ? MAX_PREVIEWS_WHEN_LIMITED : undefined)
-                .map((link) => this.fetcher.fetchPreview(link, loadMedia)),
+                .map((link) => this.fetcher.fetchPreviewBundle(link)),
         );
 
         this.snapshot.merge({
@@ -232,7 +231,8 @@ export class UrlPreviewGroupViewModel
      */
     public readonly updateMediaVisible = (mediaVisible: boolean): Promise<void> => {
         this.mediaVisible = mediaVisible;
-        this.fetcher.clearCache();
+        // No need to clear the fetcher cache: what is fetched no longer depends on media
+        // visibility, which is applied when the preview is rendered.
         return this.computeSnapshot();
     };
 
@@ -262,7 +262,7 @@ export class UrlPreviewGroupViewModel
         PosthogAnalytics.instance.trackEvent<UrlPreviewVisibilityChanged>({
             eventName: "UrlPreviewVisibilityChanged",
             previewKind: "LegacyCard",
-            hasThumbnail: this.snapshot.current.previews.some((p) => !!p.image),
+            hasThumbnail: this.mediaVisible && this.snapshot.current.previews.some(hasPreviewImage),
             previewCount: this.snapshot.current.previews.length,
             visible: this.urlPreviewEnabledByUser,
         });

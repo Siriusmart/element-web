@@ -5,6 +5,8 @@
  * Please see LICENSE files in the repository root for full details.
  */
 
+import { type UnstableBundledUrlPreviewSingle } from "@element-hq/element-web-module-api";
+
 export interface UrlPreview {
     /**
      * The URL for the preview.
@@ -85,8 +87,11 @@ export interface UrlPreview {
 
 /** Snapshot data for the URL previews attached to an event. */
 export interface UrlPreviewGroupViewSnapshot {
-    /** URL previews to render. */
-    previews: Array<UrlPreview>;
+    /**
+     * URL previews to render, in the MSC4095 bundled format. Previews fetched from the
+     * homeserver are normalised into the same shape, so consumers render both alike.
+     */
+    previews: Array<UnstableBundledUrlPreviewSingle>;
     /** Total number of previews available before limiting. */
     totalPreviewCount: number;
     /** Whether the preview list is currently limited. */
@@ -102,5 +107,5 @@ export interface UrlPreviewGroupViewActions {
     /** Invoked when the hide-preview action is clicked. */
     onHideClick: () => Promise<void>;
     /** Invoked when a preview image is clicked. */
-    onImageClick: (preview: UrlPreview) => void;
+    onImageClick: (preview: UnstableBundledUrlPreviewSingle) => void;
 }
