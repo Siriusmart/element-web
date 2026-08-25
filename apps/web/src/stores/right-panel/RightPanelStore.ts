@@ -103,16 +103,36 @@ export default class RightPanelStore extends ReadyWatchingStore {
 
     // Getters
     /**
+     * DEMO: The currently open global card, if any.
+     *
+     * `this.global` has existed since the 2021 store refactor but has never had a reader or a
+     * writer -- it was only ever loaded from, and saved back to, the `RightPanel.phasesGlobal`
+     * setting. This getter is what finally gives it meaning.
+     *
+     * Everything below resolves "global first, then the room", so a global card stays on screen
+     * as you move between rooms. Room cards are still written underneath it as normal, and are
+     * revealed again once the global card is closed.
+     */
+    private get globalCard(): IRightPanelCard | undefined {
+        if (!this.global?.isOpen) return undefined;
+        const hist = this.global.history;
+        return hist.length > 0 ? hist[hist.length - 1] : undefined;
+    }
+
+    /**
      * If you are calling this from a component that already knows about a
      * specific room from props / state, then it's best to prefer
      * `isOpenForRoom` below to ensure all your data is for a single room
      * during room changes.
      */
     public get isOpen(): boolean {
+        if (this.globalCard) return true;
         return this.byRoom[this.viewedRoomId ?? ""]?.isOpen ?? false;
     }
 
     public isOpenForRoom(roomId: string): boolean {
+        // DEMO: a global card keeps the panel open in every room, which is the whole point.
+        if (this.globalCard) return true;
         return this.byRoom[roomId]?.isOpen ?? false;
     }
 
@@ -127,6 +147,7 @@ export default class RightPanelStore extends ReadyWatchingStore {
      * during room changes.
      */
     public get currentCard(): IRightPanelCard {
+        if (this.globalCard) return this.globalCard;
         const hist = this.roomPhaseHistory;
         if (hist.length >= 1) {
             return hist[hist.length - 1];
@@ -135,6 +156,9 @@ export default class RightPanelStore extends ReadyWatchingStore {
     }
 
     public currentCardForRoom(roomId: string): IRightPanelCard {
+        // DEMO: this is the getter RightPanel.getDerivedStateFromProps uses, so returning the
+        // global card here is what actually puts the PDF on screen in every room.
+        if (this.globalCard) return this.globalCard;
         const hist = this.byRoom[roomId]?.history ?? [];
         if (hist.length > 0) {
             return hist[hist.length - 1];
@@ -227,6 +251,26 @@ export default class RightPanelStore extends ReadyWatchingStore {
         const removedCard = this.byRoom[rId].history.pop();
         this.emitAndUpdateSettings();
         return removedCard;
+    }
+
+    /**
+     * DEMO: Open a card that is not scoped to any room.
+     *
+     * Unlike setCard/pushCard there is no history and no `rId` lookup -- a single global card
+     * either is or isn't open. emitAndUpdateSettings() then persists it to the (previously
+     * write-only) `RightPanel.phasesGlobal` device setting, so it survives a reload.
+     */
+    public setGlobalCard(card: IRightPanelCard): void {
+        this.global = { history: [card], isOpen: true };
+        this.emitAndUpdateSettings();
+    }
+
+    /**
+     * DEMO: Close the global card, revealing whatever room card was underneath it.
+     */
+    public closeGlobalCard(): void {
+        this.global = undefined;
+        this.emitAndUpdateSettings();
     }
 
     public togglePanel(roomId: string | null): void {
@@ -368,6 +412,14 @@ export default class RightPanelStore extends ReadyWatchingStore {
                     logger.warn("removed card from right panel because of missing widgetId in card state");
                 }
                 return !!card.state?.widgetId;
+            // DEMO: without this the default below would accept a PdfViewer card with no URL,
+            // e.g. one restored from storage written by an older build, and we'd render an
+            // empty iframe. filterValidCards() drops it instead.
+            case RightPanelPhases.PdfViewer:
+                if (!card.state?.pdfUrl) {
+                    logger.warn("removed card from right panel because of missing pdfUrl in card state");
+                }
+                return !!card.state?.pdfUrl;
         }
         return true;
     }

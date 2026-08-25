@@ -34,6 +34,7 @@ import { Action } from "../../dispatcher/actions";
 import { type XOR } from "../../@types/common";
 import ExtensionsCard from "../views/right_panel/ExtensionsCard";
 import MemberListView from "../views/rooms/MemberList/MemberListView";
+import BaseCard from "../views/right_panel/BaseCard";
 
 interface BaseProps {
     overwriteCard?: IRightPanelCard; // used to display a custom card and ignoring the RightPanelStore (used for UserView)
@@ -140,6 +141,11 @@ export default class RightPanel extends React.Component<Props, IState> {
         ) {
             // When the user clicks close on the encryption panel cancel the pending request first if any
             void this.state.cardState.verificationRequest.cancel();
+        } else if (this.state.phase === RightPanelPhases.PdfViewer) {
+            // DEMO: togglePanel() below only touches this room's entry, which would leave the
+            // global card open and the panel looking stuck. Clear the global card instead --
+            // that also reveals whatever room card was sitting underneath it.
+            RightPanelStore.instance.closeGlobalCard();
         } else {
             RightPanelStore.instance.togglePanel(this.props.room?.roomId ?? null);
         }
@@ -275,6 +281,27 @@ export default class RightPanel extends React.Component<Props, IState> {
             case RightPanelPhases.Widget:
                 if (!!this.props.room && !!cardState?.widgetId) {
                     card = <WidgetCard room={this.props.room} widgetId={cardState.widgetId} onClose={this.onClose} />;
+                }
+                break;
+
+            // DEMO: note this is the only case that does not read `this.props.room`. It renders
+            // purely from cardState, which is precisely what lets the same card stay on screen
+            // while the user moves between rooms.
+            case RightPanelPhases.PdfViewer:
+                if (!!cardState?.pdfUrl) {
+                    card = (
+                        <BaseCard header="PDF" onClose={this.onClose} withoutScrollContainer={true}>
+                            {/* Inline styles to keep the demo to a single file; a real card would
+                                use a .module.css like the others. No sandbox: the browser's
+                                built-in PDF viewer needs scripting, and this is a local demo. */}
+                            {/* eslint-disable-next-line react/iframe-missing-sandbox */}
+                            <iframe
+                                src={cardState.pdfUrl}
+                                title="PDF"
+                                style={{ width: "100%", height: "100%", border: "none" }}
+                            />
+                        </BaseCard>
+                    );
                 }
                 break;
         }
