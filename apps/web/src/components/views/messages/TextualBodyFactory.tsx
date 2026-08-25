@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import React, { type JSX, useContext, useEffect, useRef } from "react";
+import React, { type JSX, useContext, useEffect, useMemo, useRef } from "react";
 import { logger as rootLogger } from "matrix-js-sdk/src/logger";
 import { MsgType } from "matrix-js-sdk/src/matrix";
 import {
@@ -21,6 +21,7 @@ import {
     type MediaPreviewGroupEntry,
     type MediaPreviewGroupEntryContent,
 } from "@element-hq/web-shared-components";
+import { type UnstableBundledUrlPreviewSingle } from "@element-hq/element-web-module-api";
 
 import { type IBodyProps } from "./IBodyProps";
 import RoomContext from "../../../contexts/RoomContext";
@@ -36,6 +37,7 @@ import ImageView from "../elements/ImageView";
 import EditMessageComposer from "../rooms/EditMessageComposer";
 import { EditWysiwygComposer } from "../rooms/wysiwyg_composer";
 import { UrlPreviewGroupViewModel } from "../../../viewmodels/message-body/UrlPreviewGroupViewModel";
+import { urlPreviewFromBundle } from "../../../utils/UrlPreviewFetcher";
 import PlatformPeg from "../../../PlatformPeg";
 import { useSettingValue } from "../../../hooks/useSettings";
 import { MediaPreviewGroupViewModel } from "../../../viewmodels/message-body/MediaPreviewGroupViewModel";
@@ -69,6 +71,7 @@ export function TextualBodyFactory(props: Readonly<IBodyProps>): JSX.Element {
     const stripReply = !props.mxEvent.replacingEvent() && !!getParentEventId(props.mxEvent);
     const contentRef = useRef<TextualBodyContentElement>(null);
     const urlPreviewBundleEnabled = useSettingValue("feature_msc4095_url_preview_bundle");
+    const showTooltips = PlatformPeg.get()?.needsUrlTooltips() ?? true;
 
     const textualBodyVm = useCreateAutoDisposedViewModel(
         () =>
@@ -107,7 +110,8 @@ export function TextualBodyFactory(props: Readonly<IBodyProps>): JSX.Element {
                 client,
                 mxEvent: props.mxEvent,
                 mediaVisible,
-                onImageClicked: (preview: UrlPreview): void => {
+                onImageClicked: (bundled: UnstableBundledUrlPreviewSingle): void => {
+                    const preview = urlPreviewFromBundle(bundled, client, { loadMedia: true, showTooltips });
                     if (!preview.image?.imageFull) {
                         return;
                     }
@@ -128,12 +132,19 @@ export function TextualBodyFactory(props: Readonly<IBodyProps>): JSX.Element {
                     );
                 },
                 visible: props.showUrlPreview ?? false,
-                showTooltips: PlatformPeg.get()?.needsUrlTooltips() ?? true,
                 urlPreviewBundleEnabled,
             }),
     );
 
     const { previews, totalPreviewCount, previewsLimited, overPreviewLimit } = useViewModel(urlPreviewVm);
+
+    // The view model holds previews in the MSC4095 bundled format; rendering them needs the
+    // client (to resolve media) and the current media visibility.
+    const urlPreviews = useMemo(
+        () =>
+            previews.map((preview) => urlPreviewFromBundle(preview, client, { loadMedia: mediaVisible, showTooltips })),
+        [previews, client, mediaVisible, showTooltips],
+    );
 
     const collapse = overPreviewLimit
         ? {
@@ -199,7 +210,7 @@ export function TextualBodyFactory(props: Readonly<IBodyProps>): JSX.Element {
     const mediaPreviewVm = useCreateAutoDisposedViewModel(
         () =>
             new MediaPreviewGroupViewModel({
-                entries: previews.map(previewToEntry),
+                entries: urlPreviews.map(previewToEntry),
             }),
     );
 
@@ -274,17 +285,17 @@ export function TextualBodyFactory(props: Readonly<IBodyProps>): JSX.Element {
 
     useEffect(() => {
         mediaPreviewVm.replace({
-            entries: previews.map(previewToEntry),
+            entries: urlPreviews.map(previewToEntry),
         });
-    }, [previews, mediaPreviewVm]);
+    }, [urlPreviews, mediaPreviewVm]);
 
     useEffect(() => {
-        if (previews.length === 0) {
+        if (urlPreviews.length === 0) {
             return;
         }
 
-        PosthogTrackers.instance.trackUrlPreview(props.mxEvent.getId()!, props.mxEvent.isEncrypted(), previews);
-    }, [props.mxEvent, previews]);
+        PosthogTrackers.instance.trackUrlPreview(props.mxEvent.getId()!, props.mxEvent.isEncrypted(), urlPreviews);
+    }, [props.mxEvent, urlPreviews]);
 
     if (props.editState) {
         const isWysiwygComposerEnabled = SettingsStore.getValue("feature_wysiwyg_composer");

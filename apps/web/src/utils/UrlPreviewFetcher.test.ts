@@ -9,7 +9,7 @@ import { vi, describe, it, expect, beforeAll, afterAll, type Mock } from "vitest
 
 import type { IPreviewUrlResponse, MatrixClient } from "matrix-js-sdk/src/matrix";
 import { type UnstableBundledUrlPreviewSingle } from "@element-hq/element-web-module-api";
-import { UrlPreviewFetcher } from "./UrlPreviewFetcher";
+import { UrlPreviewFetcher, urlPreviewFromBundle } from "./UrlPreviewFetcher";
 
 const IMAGE_MXC = "mxc://example.org/abc";
 const BASIC_PREVIEW_OGDATA = {
@@ -20,6 +20,9 @@ const BASIC_PREVIEW_OGDATA = {
     "og:site_name": "Example.org",
 };
 
+/** Render options matching the previous default: media loaded, tooltips off. */
+const RENDER_OPTIONS = { loadMedia: true, showTooltips: false };
+
 function getFetcher(): {
     fetcher: UrlPreviewFetcher;
     client: { getUrlPreview: Mock; mxcUrlToHttp: Mock };
@@ -29,7 +32,7 @@ function getFetcher(): {
         mxcUrlToHttp: vi.fn(),
     } as unknown as MatrixClient;
     return {
-        fetcher: new UrlPreviewFetcher(client, 0, false),
+        fetcher: new UrlPreviewFetcher(client, 0),
         client: client as unknown as { getUrlPreview: Mock; mxcUrlToHttp: Mock },
     };
 }
@@ -46,7 +49,7 @@ describe("UrlPreviewFetcher", () => {
     it("should return null when the fetch fails", async () => {
         const { fetcher, client } = getFetcher();
         client.getUrlPreview.mockRejectedValue(new Error("Forced test failure"));
-        expect(await fetcher.fetchPreview("https://example.org", true)).toBeNull();
+        expect(await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS)).toBeNull();
     });
 
     it("should return null when title equals the URL and there is no image", async () => {
@@ -56,23 +59,23 @@ describe("UrlPreviewFetcher", () => {
             "og:type": "document",
             "og:url": "https://example.org",
         });
-        expect(await fetcher.fetchPreview("https://example.org", true)).toBeNull();
+        expect(await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS)).toBeNull();
     });
 
     it("should cache results and not re-fetch for the same URL", async () => {
         const { fetcher, client } = getFetcher();
         client.getUrlPreview.mockResolvedValue(BASIC_PREVIEW_OGDATA);
-        await fetcher.fetchPreview("https://example.org", true);
-        await fetcher.fetchPreview("https://example.org", true);
+        await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
+        await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
         expect(client.getUrlPreview).toHaveBeenCalledTimes(1);
     });
 
     it("should re-fetch after clearCache is called", async () => {
         const { fetcher, client } = getFetcher();
         client.getUrlPreview.mockResolvedValue(BASIC_PREVIEW_OGDATA);
-        await fetcher.fetchPreview("https://example.org", true);
+        await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
         fetcher.clearCache();
-        await fetcher.fetchPreview("https://example.org", true);
+        await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
         expect(client.getUrlPreview).toHaveBeenCalledTimes(2);
     });
 
@@ -87,7 +90,7 @@ describe("UrlPreviewFetcher", () => {
             "og:image:width": 128,
             "matrix:image:size": 10000,
         });
-        const preview = await fetcher.fetchPreview("https://example.org", false);
+        const preview = await fetcher.fetchPreview("https://example.org", { ...RENDER_OPTIONS, loadMedia: false });
         expect(preview?.image).toBeUndefined();
         // eslint-disable-next-line no-restricted-properties
         expect(client.mxcUrlToHttp).not.toHaveBeenCalled();
@@ -110,7 +113,7 @@ describe("UrlPreviewFetcher", () => {
             if (width) return "https://example.org/image/thumb";
             return "https://example.org/image/src";
         });
-        const preview = await fetcher.fetchPreview("https://example.org", true);
+        const preview = await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
         expect(preview).toMatchSnapshot();
     });
 
@@ -135,7 +138,7 @@ describe("UrlPreviewFetcher", () => {
             expect(url).toEqual(IMAGE_MXC);
             return "https://example.org/image/src";
         });
-        const preview = await fetcher.fetchPreview("https://example.org", true);
+        const preview = await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
         expect(preview?.siteIcon).toBeTruthy();
         expect(preview?.image).toBeUndefined();
     });
@@ -155,7 +158,7 @@ describe("UrlPreviewFetcher", () => {
             "matrix:image:size": 10000,
             [property]: "anything",
         });
-        const preview = await fetcher.fetchPreview("https://example.org", true);
+        const preview = await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
         expect(preview?.image?.playable).toBe(true);
     });
 
@@ -163,7 +166,7 @@ describe("UrlPreviewFetcher", () => {
         it("should use the profile:username if provided", async () => {
             const { fetcher, client } = getFetcher();
             client.getUrlPreview.mockResolvedValueOnce({ ...BASIC_PREVIEW_OGDATA, "profile:username": "my username" });
-            const preview = await fetcher.fetchPreview("https://example.org", true);
+            const preview = await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
             expect(preview?.author).toEqual("my username");
         });
 
@@ -174,7 +177,7 @@ describe("UrlPreviewFetcher", () => {
                 "og:type": "article",
                 "article:author": "my name",
             });
-            const preview = await fetcher.fetchPreview("https://example.org", true);
+            const preview = await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
             expect(preview?.author).toEqual("my name");
         });
 
@@ -185,7 +188,7 @@ describe("UrlPreviewFetcher", () => {
                 "og:type": "article",
                 "article:author": "https://junk.example.org/foo",
             });
-            const preview = await fetcher.fetchPreview("https://example.org", true);
+            const preview = await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
             expect(preview?.author).toBeUndefined();
         });
     });
@@ -218,11 +221,47 @@ describe("UrlPreviewFetcher", () => {
             return "https://example.org/image/src";
         });
         client.getUrlPreview.mockResolvedValueOnce(og);
-        const preview = await fetcher.fetchPreview("https://example.org", true);
+        const preview = await fetcher.fetchPreview("https://example.org", RENDER_OPTIONS);
         expect(preview).toMatchSnapshot();
     });
 
-    describe("previewFromBundle", () => {
+    describe("fetchPreviewBundle", () => {
+        it("should return the opengraph response in the bundled format", async () => {
+            const { fetcher, client } = getFetcher();
+            client.getUrlPreview.mockResolvedValueOnce(BASIC_PREVIEW_OGDATA);
+            const preview = await fetcher.fetchPreviewBundle("https://example.org");
+            expect(preview).toEqual({ ...BASIC_PREVIEW_OGDATA, matched_url: "https://example.org" });
+            // No media is resolved: that happens when the preview is rendered.
+            // eslint-disable-next-line no-restricted-properties
+            expect(client.mxcUrlToHttp).not.toHaveBeenCalled();
+        });
+
+        it("should return null when the fetch fails", async () => {
+            const { fetcher, client } = getFetcher();
+            client.getUrlPreview.mockRejectedValue(new Error("Forced test failure"));
+            expect(await fetcher.fetchPreviewBundle("https://example.org")).toBeNull();
+        });
+
+        it("should return null when title equals the URL and there is no image", async () => {
+            const { fetcher, client } = getFetcher();
+            client.getUrlPreview.mockResolvedValueOnce({
+                "og:title": "https://example.org",
+                "og:type": "document",
+                "og:url": "https://example.org",
+            });
+            expect(await fetcher.fetchPreviewBundle("https://example.org")).toBeNull();
+        });
+
+        it("should cache results and not re-fetch for the same URL", async () => {
+            const { fetcher, client } = getFetcher();
+            client.getUrlPreview.mockResolvedValue(BASIC_PREVIEW_OGDATA);
+            await fetcher.fetchPreviewBundle("https://example.org");
+            await fetcher.fetchPreviewBundle("https://example.org");
+            expect(client.getUrlPreview).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("urlPreviewFromBundle", () => {
         const BASIC_BUNDLE: UnstableBundledUrlPreviewSingle = {
             "matched_url": "https://example.org/page",
             "og:title": "Bundled title",
@@ -248,9 +287,20 @@ describe("UrlPreviewFetcher", () => {
             });
         }
 
+        function fromBundle(
+            preview: UnstableBundledUrlPreviewSingle,
+            client: { mxcUrlToHttp: Mock },
+            options: Partial<typeof RENDER_OPTIONS> = {},
+        ): ReturnType<typeof urlPreviewFromBundle> {
+            return urlPreviewFromBundle(preview, client as unknown as MatrixClient, {
+                ...RENDER_OPTIONS,
+                ...options,
+            });
+        }
+
         it("should map basic bundle fields without an image", () => {
-            const { fetcher, client } = getFetcher();
-            const preview = fetcher.previewFromBundle(BASIC_BUNDLE);
+            const { client } = getFetcher();
+            const preview = fromBundle(BASIC_BUNDLE, client);
             expect(preview).toEqual({
                 link: "https://example.org/page",
                 title: "Bundled title",
@@ -263,86 +313,100 @@ describe("UrlPreviewFetcher", () => {
             expect(client.mxcUrlToHttp).not.toHaveBeenCalled();
         });
 
-        it("should fall back to the matched_url when there is no title", () => {
-            const { fetcher } = getFetcher();
-            const preview = fetcher.previewFromBundle({ matched_url: "https://example.org/page" });
-            expect(preview.title).toEqual("https://example.org/page");
+        it("should fall back to the site name when there is no title", () => {
+            const { client } = getFetcher();
+            const preview = fromBundle({ matched_url: "https://example.org/page" }, client);
+            expect(preview.title).toEqual("example.org");
             expect(preview.showTooltipOnLink).toBe(false);
         });
 
-        it("should set showTooltipOnLink when tooltips are enabled and title differs from the URL", () => {
+        it("should prefer og:site_name over the matched_url hostname", () => {
             const { client } = getFetcher();
-            const fetcher = new UrlPreviewFetcher(client as unknown as MatrixClient, 0, true);
-            const preview = fetcher.previewFromBundle(BASIC_BUNDLE);
+            const preview = fromBundle({ ...BASIC_BUNDLE, "og:site_name": "Example dot org" }, client);
+            expect(preview.siteName).toEqual("Example dot org");
+        });
+
+        it("should set showTooltipOnLink when tooltips are enabled and the title differs from the URL", () => {
+            const { client } = getFetcher();
+            const preview = fromBundle(BASIC_BUNDLE, client, { showTooltips: true });
             expect(preview.showTooltipOnLink).toBe(true);
         });
 
-        // Unlike fetchPreview, the tooltip flag is computed against the raw og:title rather than
-        // the resolved title, so a missing og:title still shows a tooltip even though the displayed
-        // title falls back to the matched_url.
-        it("should set showTooltipOnLink when tooltips are enabled and og:title is absent", () => {
+        it("should not set showTooltipOnLink when tooltips are enabled but the title equals the URL", () => {
             const { client } = getFetcher();
-            const fetcher = new UrlPreviewFetcher(client as unknown as MatrixClient, 0, true);
-            const preview = fetcher.previewFromBundle({ matched_url: "https://example.org/page" });
-            expect(preview.showTooltipOnLink).toBe(true);
-        });
-
-        it("should not set showTooltipOnLink when tooltips are enabled but og:title equals the URL", () => {
-            const { client } = getFetcher();
-            const fetcher = new UrlPreviewFetcher(client as unknown as MatrixClient, 0, true);
-            const preview = fetcher.previewFromBundle({
-                "matched_url": "https://example.org/page",
-                "og:title": "https://example.org/page",
-            });
+            const preview = fromBundle(
+                { "matched_url": "https://example.org/page", "og:title": "https://example.org/page" },
+                client,
+                { showTooltips: true },
+            );
             expect(preview.showTooltipOnLink).toBe(false);
         });
 
-        it("should include the image when all image fields are present", () => {
-            const { fetcher, client } = getFetcher();
+        it("should include the image, clamping the width to the preview size", () => {
+            const { client } = getFetcher();
             mockMedia(client);
-            const preview = fetcher.previewFromBundle(IMAGE_BUNDLE);
+            const preview = fromBundle(IMAGE_BUNDLE, client);
             expect(preview.image).toEqual({
                 imageThumb: "https://example.org/image/thumb",
                 imageFull: "https://example.org/image/src",
                 imageType: "image/png",
                 mxcImageFull: IMAGE_MXC,
-                width: 500,
+                width: 478,
                 height: 400,
+                fileSize: 10000,
+                alt: undefined,
                 playable: false,
             });
         });
 
-        it.each<Partial<UnstableBundledUrlPreviewSingle>>([
-            { "og:image": undefined },
-            { "og:image:type": undefined },
-            { "og:image:width": undefined },
-            { "og:image:height": undefined },
-            // Non-numeric dimensions are ignored (bundle values are trusted as-is).
-            { "og:image:width": "500" as unknown as number },
-        ])("should omit the image when image metadata is incomplete %s", (override) => {
-            const { fetcher, client } = getFetcher();
+        it("should include the image when only og:image is provided", () => {
+            const { client } = getFetcher();
             mockMedia(client);
-            const preview = fetcher.previewFromBundle({ ...IMAGE_BUNDLE, ...override });
+            const preview = fromBundle({ ...BASIC_BUNDLE, "og:image": IMAGE_MXC }, client);
+            expect(preview.image).toMatchObject({ mxcImageFull: IMAGE_MXC });
+        });
+
+        it("should omit the image when there is no og:image", () => {
+            const { client } = getFetcher();
+            mockMedia(client);
+            const preview = fromBundle({ ...IMAGE_BUNDLE, "og:image": undefined }, client);
             expect(preview.image).toBeUndefined();
         });
 
+        it("should omit the image when media is not loaded", () => {
+            const { client } = getFetcher();
+            mockMedia(client);
+            const preview = fromBundle(IMAGE_BUNDLE, client, { loadMedia: false });
+            expect(preview.image).toBeUndefined();
+            // eslint-disable-next-line no-restricted-properties
+            expect(client.mxcUrlToHttp).not.toHaveBeenCalled();
+        });
+
+        it("should use a site icon for small images", () => {
+            const { client } = getFetcher();
+            mockMedia(client);
+            const preview = fromBundle({ ...IMAGE_BUNDLE, "og:image:width": 95 }, client);
+            expect(preview.image).toBeUndefined();
+            expect(preview.siteIcon).toEqual("https://example.org/image/src");
+        });
+
         it("should omit the image when the media mxc URL is malformed", () => {
-            const { fetcher, client } = getFetcher();
+            const { client } = getFetcher();
             // A malformed/unresolvable mxc yields no HTTP URL.
             // eslint-disable-next-line no-restricted-properties
             client.mxcUrlToHttp.mockReturnValue(null);
-            const preview = fetcher.previewFromBundle(IMAGE_BUNDLE);
+            const preview = fromBundle(IMAGE_BUNDLE, client);
             expect(preview.image).toBeUndefined();
             // The rest of the preview is still returned.
             expect(preview.title).toEqual("Bundled title");
         });
 
         it("should compute the siteName from the matched_url hostname", () => {
-            const { fetcher } = getFetcher();
-            const preview = fetcher.previewFromBundle({
-                ...BASIC_BUNDLE,
-                matched_url: "https://sub.example.com:8443/some/path?q=1",
-            });
+            const { client } = getFetcher();
+            const preview = fromBundle(
+                { ...BASIC_BUNDLE, matched_url: "https://sub.example.com:8443/some/path?q=1" },
+                client,
+            );
             expect(preview.siteName).toEqual("sub.example.com");
         });
     });

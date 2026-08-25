@@ -64,7 +64,7 @@ export class MessageComposerUrlPreviewViewModel extends BaseViewModel<
     public constructor(props: MessageComposerUrlPreviewViewModelProps) {
         super(props, { entries: [], content: props.content ?? "" });
         this.urlPreviewVisible = props.visible;
-        this.fetcher = new UrlPreviewFetcher(props.client, Date.now(), props.showTooltips);
+        this.fetcher = new UrlPreviewFetcher(props.client, Date.now());
         this.content = this.snapshot.current.content;
     }
 
@@ -91,7 +91,8 @@ export class MessageComposerUrlPreviewViewModel extends BaseViewModel<
                     matched_url: link,
                 });
 
-                void this.fetcher.fetchPreview(link, true).then((fetched) => {
+                const options = { loadMedia: true, showTooltips: this.props.showTooltips };
+                void this.fetcher.fetchPreview(link, options).then((fetched) => {
                     // update cache
                     const currentEntry = this.previewCache.get(link);
                     if (fetched === null) {
