@@ -35,6 +35,8 @@ import RoomAvatar from "../components/views/avatars/RoomAvatar";
 import { ModuleNotificationDecoration } from "../modules/components/ModuleNotificationDecoration";
 import Login from "../Login.ts";
 import { startOAuthLogin } from "../utils/oauth/authorize.ts";
+import { registerMimetypePreviewTilePatcher } from "../modules/MimetypePreviewTilePatcher.ts";
+import { registerFileExtensionPreviewTilePatcher } from "../modules/FileExtensionPreviewTilePatcher.ts";
 
 // oxlint-disable-next-line node/no-process-env
 logger.log(`Application is running in ${process.env.NODE_ENV} mode`);
@@ -97,6 +99,9 @@ export async function loadApp(urlParams: URLParams, matrixChatRef: React.Ref<Mat
         roomAvatar: RoomAvatar,
         notificationDecoration: ModuleNotificationDecoration,
     });
+
+    registerMimetypePreviewTilePatcher();
+    registerFileExtensionPreviewTilePatcher();
 
     initRouting();
     const platform = PlatformPeg.get();
