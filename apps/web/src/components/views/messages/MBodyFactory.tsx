@@ -13,6 +13,7 @@ import {
     FileBodyView,
     ImageBodyView,
     MediaPreviewGroupPreview,
+    type MediaPreviewEntryButton,
     RedactedBodyView,
     VideoBodyView,
     _t,
@@ -35,7 +36,10 @@ import { isMimeTypeAllowed } from "../../../utils/blobs";
 import { MediaPreviewGroupViewModel } from "../../../viewmodels/message-body/MediaPreviewGroupViewModel";
 import { fileSize } from "../../../utils/FileUtils";
 import DownloadIcon from "@vector-im/compound-design-tokens/assets/web/icons/download";
+import SidebarIcon from "@vector-im/compound-design-tokens/assets/web/icons/sidebar";
 import { FileDownloader } from "../../../utils/FileDownloader";
+import RightPanelStore from "../../../stores/right-panel/RightPanelStore";
+import { RightPanelPhases } from "../../../stores/right-panel/RightPanelStorePhases";
 
 type MBodyComponent = React.ComponentType<IBodyProps>;
 
@@ -92,35 +96,57 @@ function PreviewFileBody({ mxEvent, mediaEventHelper }: FileBodyProps): JSX.Elem
 
     const downloader = new FileDownloader();
 
-    const vm = useCreateAutoDisposedViewModel(
-        () =>
-            new MediaPreviewGroupViewModel({
-                entries: [
-                    {
-                        id: mxEvent.getId()!,
-                        style: "text",
-                        header: mediaEventHelper!.fileName,
-                        body: size === undefined ? _t("timeline|m.file|size_unknown") : fileSize(size),
-                        buttons:
-                            mediaEventHelper === undefined
-                                ? undefined
-                                : [
-                                      {
-                                          label: _t("action|download"),
-                                          icon: <DownloadIcon />,
-                                          onClick: async () => {
-                                              await downloader.download({
-                                                  blob: await mediaEventHelper.sourceBlob.value, // decrypts transparently if E2EE
-                                                  name: mediaEventHelper.fileName || _t("common|attachment"),
-                                              });
-                                          },
-                                      },
-                                  ],
-                        ...attachmentIcon(content.info?.mimetype),
-                    },
-                ],
-            }),
-    );
+    const vm = useCreateAutoDisposedViewModel(() => {
+        // DEMO: the tile already accepts a `buttons` array and renders whatever it is given,
+        // so nothing in packages/shared-components needs to change -- we only decide here
+        // which buttons this particular file gets.
+        const buttons: MediaPreviewEntryButton[] = [];
+
+        if (mediaEventHelper !== undefined) {
+            buttons.push({
+                label: _t("action|download"),
+                icon: <DownloadIcon />,
+                onClick: async () => {
+                    await downloader.download({
+                        blob: await mediaEventHelper.sourceBlob.value, // decrypts transparently if E2EE
+                        name: mediaEventHelper.fileName || _t("common|attachment"),
+                    });
+                },
+            });
+
+            // DEMO: PDFs get a second button that opens the file in a global right panel card.
+            // `srcHttp` is the plain unauthenticated /_matrix/media/v3/download/... URL, which an
+            // iframe can load directly on a permissive homeserver. A server enforcing
+            // authenticated media would 401 here and the iframe would come up blank.
+            if (content.info?.mimetype === "application/pdf") {
+                const pdfUrl = mediaEventHelper.media.srcHttp;
+                if (pdfUrl !== null) {
+                    buttons.push({
+                        label: "Open in right panel",
+                        icon: <SidebarIcon />,
+                        onClick: () =>
+                            RightPanelStore.instance.setGlobalCard({
+                                phase: RightPanelPhases.PdfViewer,
+                                state: { pdfUrl },
+                            }),
+                    });
+                }
+            }
+        }
+
+        return new MediaPreviewGroupViewModel({
+            entries: [
+                {
+                    id: mxEvent.getId()!,
+                    style: "text",
+                    header: mediaEventHelper!.fileName,
+                    body: size === undefined ? _t("timeline|m.file|size_unknown") : fileSize(size),
+                    buttons: buttons.length > 0 ? buttons : undefined,
+                    ...attachmentIcon(content.info?.mimetype),
+                },
+            ],
+        });
+    });
 
     return (
         <div className="mx_EventTile_content">
